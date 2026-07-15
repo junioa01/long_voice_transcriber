@@ -15,7 +15,6 @@ android {
         versionName = "1.0"
     }
 
-    // Fix: Explicitly force both compilers to use Java 17 to match GitHub Actions
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -24,6 +23,7 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    
     buildFeatures {
         compose = true
     }
@@ -42,12 +42,15 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     
+    // Added Extended Icons for ContentCopy
+    implementation("androidx.compose.material:material-icons-extended")
+    
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Google AI SDK for Gemini Integration
-    implementation("com.google.ai.client.generativeai:generativeai:0.2.2")
+    // Updated Google AI SDK to 0.9.0 for inlineData support
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 }
