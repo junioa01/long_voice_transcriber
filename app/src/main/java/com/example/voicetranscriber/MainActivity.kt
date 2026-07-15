@@ -434,7 +434,7 @@ private suspend fun transcribeAudio(
 
             // Initialize Generative model using Gemini 2.5 Flash
             val model = GenerativeModel(
-                modelName = "gemini-2.5-flash-preview-09-2025",
+                modelName = "gemini-1.5-flash",
                 apiKey = apiKey
             )
 
