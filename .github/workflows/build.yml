@@ -1,7 +1,5 @@
 name: Build Android APK
 
-# This triggers the build automatically every time you push changes to the main branch,
-# and also allows you to click a "Run workflow" button manually in the Actions tab.
 on:
   push:
     branches: [ "main" ]
@@ -21,15 +19,15 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # Sets up the Gradle build system since we aren't uploading a Gradle wrapper
+    # Sets up a specific, stable Gradle version (8.7) to prevent version clashes
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.7'
 
-    # Compiles the app into a debug APK
     - name: Build Debug APK
       run: gradle assembleDebug
 
-    # Uploads the finished APK so you can download it from the GitHub Actions page
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
