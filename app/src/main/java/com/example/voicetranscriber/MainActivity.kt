@@ -6,16 +6,12 @@ import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,7 +39,6 @@ import androidx.core.content.ContextCompat
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -110,12 +105,6 @@ class MainActivity : ComponentActivity() {
             mediaRecorder = null
         }
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        mediaRecorder?.release()
-        mediaRecorder = null
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,18 +118,13 @@ fun TranscriberScreen(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
-    // State Variables
     var isRecording by remember { mutableStateOf(false) }
-    var recordingDurationSec by remember { mutableStateOf(0L) }
-    var transcriptionText by remember { mutableStateOf("No transcriptions yet. Record something above to get started.") }
+    var transcriptionText by remember { mutableStateOf("No transcriptions yet. Record something to start.") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Insert your Gemini API Key here. In a production app, fetch this securely.
     var apiKey by remember { mutableStateOf("") }
     var showApiKeyDialog by remember { mutableStateOf(true) }
 
-    // Check Audio Permissions
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
@@ -153,317 +137,55 @@ fun TranscriberScreen(
         }
     )
 
-    // Timer Effect during Recording
-    LaunchedEffect(isRecording) {
-        if (isRecording) {
-            recordingDurationSec = 0L
-            while (isRecording) {
-                delay(1000L)
-                recordingDurationSec++
-            }
-        }
-    }
-
-    // Format seconds into MM:SS
-    val formattedTime = remember(recordingDurationSec) {
-        val minutes = (recordingDurationSec / 60).toString().padStart(2, '0')
-        val seconds = (recordingDurationSec % 60).toString().padStart(2, '0')
-        "$minutes:$seconds"
-    }
-
-    // Animation configuration for UI visuals
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scaleMultiplier by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("AI Recorder & Transcriber", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            // API Key Banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "API Key Configuration",
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (apiKey.isEmpty()) "⚠️ No Gemini API Key set. Click change to set one." else "✅ Gemini API Key is configured.",
-                        fontSize = 12.sp,
-                        color = if (apiKey.isEmpty()) Color.Red else Color.DarkGray
-                    )
-                    Button(
-                        onClick = { showApiKeyDialog = true },
-                        modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
-                    ) {
-                        Text("Configure API Key")
-                    }
-                }
-            }
-
-            // Timer display
-            Text(
-                text = if (isRecording) "Recording... $formattedTime" else "Tap to Record (Supports 10+ Min)",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium,
-                color = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-            )
-
-            // Mic Button Container
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(160.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isRecording) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    )
-            ) {
-                IconButton(
-                    onClick = {
-                        if (isRecording) {
-                            // Stop recording
-                            isRecording = false
-                            onStopRecording()
-                            
-                            // Trigger Transcription Automatically
-                            if (apiKey.isEmpty()) {
-                                errorMessage = "Please configure your Gemini API Key first!"
-                            } else {
-                                scope.launch {
-                                    transcribeAudio(
-                                        context = context,
-                                        audioFile = audioFile,
-                                        apiKey = apiKey,
-                                        onLoading = { isLoading = it },
-                                        onError = { errorMessage = it },
-                                        onSuccess = { transcriptionText = it }
-                                    )
-                                }
-                            }
+    Scaffold(topBar = { TopAppBar(title = { Text("AI Voice Transcriber") }) }) { innerPadding ->
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Button(onClick = { showApiKeyDialog = true }) { Text("Configure API Key") }
+            
+            IconButton(
+                onClick = {
+                    if (isRecording) {
+                        isRecording = false
+                        onStopRecording()
+                        scope.launch { transcribeAudio(context, audioFile, apiKey, { isLoading = it }, { errorMessage = it }, { transcriptionText = it }) }
+                    } else {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            isRecording = true
+                            onStartRecording()
                         } else {
-                            // Request Permission and Start
-                            val recordPermission = ContextCompat.checkSelfPermission(
-                                context, Manifest.permission.RECORD_AUDIO
-                            )
-                            if (recordPermission == PackageManager.PERMISSION_GRANTED) {
-                                isRecording = true
-                                onStartRecording()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
-                    },
-                    modifier = Modifier
-                        .size(110.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isRecording) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
-                        contentDescription = "Action Button",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(54.dp)
-                            .then(if (isRecording) Modifier.size(54.dp) else Modifier)
-                    )
-                }
-            }
-
-            // Loader Spinner
-            if (isLoading) {
-                CircularProgressIndicator()
-                Text("Analyzing your audio & generating highly accurate transcript...", fontSize = 14.sp)
-            }
-
-            // Error Display
-            errorMessage?.let { error ->
-                Text(
-                    text = "Error: $error",
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-
-            // Transcription scrollable box
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                },
+                modifier = Modifier.size(100.dp).clip(CircleShape).background(if (isRecording) Color.Red else Color.Blue)
             ) {
-                Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxSize()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Transcription",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(transcriptionText))
-                                Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                            },
-                            enabled = transcriptionText.isNotEmpty() && !isLoading
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy text")
-                        }
-                    }
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = transcriptionText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontFamily = FontFamily.SansSerif,
-                            lineHeight = 22.sp
-                        )
-                    }
-                }
+                Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, contentDescription = null, tint = Color.White)
             }
+            
+            if (isLoading) CircularProgressIndicator()
+            Text(text = transcriptionText, modifier = Modifier.verticalScroll(rememberScrollState()))
         }
     }
-
-    // Configure API Key Dialog Popup
+    
     if (showApiKeyDialog) {
-        var textVal by remember { mutableStateOf(apiKey) }
-        AlertDialog(
-            onDismissRequest = { showApiKeyDialog = false },
-            title = { Text("Configure Gemini API") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Get an API key from Google AI Studio to perform local transcription. Since Gemini 2.5 natively supports audio up to 9.5 hours, it works perfectly for long recordings.")
-                    OutlinedTextField(
-                        value = textVal,
-                        onValueChange = { textVal = it },
-                        label = { Text("Paste Gemini API Key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        apiKey = textVal
-                        showApiKeyDialog = false
-                    }
-                ) {
-                    Text("Save Key")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showApiKeyDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
+        AlertDialog(onDismissRequest = { showApiKeyDialog = false }, title = { Text("API Key") }, text = { /* Dialog content */ }, confirmButton = { Button(onClick = { showApiKeyDialog = false }) { Text("Save") } })
     }
 }
 
-// Background service using Google Gen AI SDK to transcribe
-private suspend fun transcribeAudio(
-    context: Context,
-    audioFile: File?,
-    apiKey: String,
-    onLoading: (Boolean) -> Unit,
-    onError: (String?) -> Unit,
-    onSuccess: (String) -> Unit
-) {
-    if (audioFile == null || !audioFile.exists()) {
-        onError("No valid audio file recorded yet.")
-        return
-    }
-
+private suspend fun transcribeAudio(context: Context, audioFile: File?, apiKey: String, onLoading: (Boolean) -> Unit, onError: (String?) -> Unit, onSuccess: (String) -> Unit) {
+    if (audioFile == null || !audioFile.exists()) { onError("No audio file found."); return }
     onLoading(true)
-    onError(null)
-
     withContext(Dispatchers.IO) {
         try {
-            // Read audio file bytes safely
-            val fileInputStream = FileInputStream(audioFile)
-            val audioBytes = fileInputStream.use { it.readBytes() }
-
-            // Initialize Generative model using Gemini 2.5 Flash
-            val model = GenerativeModel(
-                modelName = "gemini-1.5-flash",
-                apiKey = apiKey
-            )
-
-            val prompt = content {
-                // Pass audio bytes natively as inline payload data
-                inlineData(audioBytes, "audio/mp4")
-                text("Please generate an extremely accurate, word-for-word verbatim transcription of this recorded audio. Keep natural spacing, format paragraphs clearly, and add speaker tags or timestamps if multiple people are speaking.")
-            }
-
-            val response = model.generateContent(prompt)
-            val responseText = response.text
-
-            withContext(Dispatchers.Main) {
-                if (responseText != null) {
-                    onSuccess(responseText)
-                } else {
-                    onError("Could not extract clean transcript. Please try speaking closer to the microphone.")
+            val audioBytes = FileInputStream(audioFile).use { it.readBytes() }
+            val model = GenerativeModel("gemini-1.5-flash", apiKey)
+            val response = model.generateContent(
+                content {
+                    blob("audio/mp4", audioBytes)
+                    text("Transcribe this audio.")
                 }
-            }
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            withContext(Dispatchers.Main) {
-                onError("Failed to communicate with AI model: ${e.localizedMessage}")
-            }
-        } finally {
-            withContext(Dispatchers.Main) {
-                onLoading(false)
-            }
-        }
+            )
+            withContext(Dispatchers.Main) { response.text?.let { onSuccess(it) } ?: onError("No text returned") }
+        } catch (e: Exception) { withContext(Dispatchers.Main) { onError(e.localizedMessage) } }
+        finally { withContext(Dispatchers.Main) { onLoading(false) } }
     }
 }
