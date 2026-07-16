@@ -305,7 +305,7 @@ private suspend fun transcribeAudio(
     withContext(Dispatchers.IO) {
         try {
             val audioBytes = FileInputStream(audioFile).use { it.readBytes() }
-            val model = GenerativeModel(modelName = "gemini-1.5-flash", apiKey = apiKey)
+            val model = GenerativeModel(modelName = "gemini-1.5-flash-latest", apiKey = apiKey)
             val prompt = content {
                 blob("audio/mp4", audioBytes)
                 text("Please provide a highly accurate, verbatim transcription of this audio.")
